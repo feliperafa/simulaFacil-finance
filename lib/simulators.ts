@@ -5,6 +5,9 @@ export type Field = {
   value: string;
   options?: [string, string][];
   type?: "date";
+  format?: "currency";
+  currencyUnit?: string;
+  currencyBase?: string;
   hint?: string;
   when?: [string, string];
 };
@@ -26,6 +29,28 @@ const f = (
   value: string,
   hint?: string,
 ): Field => ({ key, label, value, hint });
+const currency = (
+  key: string,
+  label: string,
+  value: string,
+  hint?: string,
+): Field => ({
+  ...f(key, label, value, hint),
+  format: "currency",
+  ...(
+    {
+      entrada: { currencyUnit: "unidadeEntrada", currencyBase: "valor" },
+      lanceProprio: {
+        currencyUnit: "unidadeLanceProprio",
+        currencyBase: "carta",
+      },
+      lanceEmbutido: {
+        currencyUnit: "unidadeLanceEmbutido",
+        currencyBase: "carta",
+      },
+    } as Record<string, { currencyUnit: string; currencyBase: string }>
+  )[key],
+});
 const s = (
   key: string,
   label: string,
@@ -68,8 +93,8 @@ export const simulators: Simulator[] = [
     color: "blue",
     icon: "home",
     fields: [
-      f("valor", "Valor do imóvel (R$)", "500.000"),
-      f("entrada", "Entrada", "100.000"),
+      currency("valor", "Valor do imóvel (R$)", "500.000"),
+      currency("entrada", "Entrada", "100.000"),
       s("unidadeEntrada", "Formato da entrada", "reais", [
         ["reais", "Reais (R$)"],
         ["percentual", "Percentual (%)"],
@@ -85,10 +110,10 @@ export const simulators: Simulator[] = [
         ...f("correcao", "Correção mensal hipotética (%)", "0"),
         when: ["indexador", "fixo"],
       },
-      f("seguro", "Seguros mensais (R$)", "0"),
-      f("tarifas", "Tarifas à vista (R$)", "0"),
-      f("custos", "Custos adicionais à vista (R$)", "0"),
-      f(
+      currency("seguro", "Seguros mensais (R$)", "0"),
+      currency("tarifas", "Tarifas à vista (R$)", "0"),
+      currency("custos", "Custos adicionais à vista (R$)", "0"),
+      currency(
         "renda",
         "Renda familiar mensal (R$)",
         "12.000",
@@ -117,12 +142,12 @@ export const simulators: Simulator[] = [
     color: "green",
     icon: "chart",
     fields: [
-      f("saldo", "Saldo devedor atual (R$)", "300.000"),
+      currency("saldo", "Saldo devedor atual (R$)", "300.000"),
       ...term,
       ...rate,
       system,
-      f("prestacao", "Prestação atual, se conhecida (R$)", "0"),
-      f("extra", "Amortização extraordinária (R$)", "20.000"),
+      currency("prestacao", "Prestação atual, se conhecida (R$)", "0"),
+      currency("extra", "Amortização extraordinária (R$)", "20.000"),
       date("dataSaldo", "Data do saldo informado"),
       date("dataExtra", "Data prevista da amortização"),
       s("periodicidade", "Periodicidade", "unica", [
@@ -157,18 +182,18 @@ export const simulators: Simulator[] = [
     color: "purple",
     icon: "users",
     fields: [
-      f("carta", "Carta de crédito (R$)", "300.000"),
+      currency("carta", "Carta de crédito (R$)", "300.000"),
       ...term.map((x) => (x.key === "prazo" ? { ...x, value: "180" } : x)),
       f("administracao", "Administração total do plano (%)", "20"),
       f("reserva", "Fundo de reserva total (%)", "2"),
-      f("seguro", "Seguro mensal (R$)", "0"),
-      f("prestacao", "Parcela atual, se conhecida (R$)", "0"),
-      f("lanceProprio", "Lance próprio", "30.000"),
+      currency("seguro", "Seguro mensal (R$)", "0"),
+      currency("prestacao", "Parcela atual, se conhecida (R$)", "0"),
+      currency("lanceProprio", "Lance próprio", "30.000"),
       s("unidadeLanceProprio", "Formato do lance próprio", "reais", [
         ["reais", "Reais (R$)"],
         ["percentual", "Percentual da carta (%)"],
       ]),
-      f("lanceEmbutido", "Lance embutido", "30.000"),
+      currency("lanceEmbutido", "Lance embutido", "30.000"),
       s("unidadeLanceEmbutido", "Formato do lance embutido", "reais", [
         ["reais", "Reais (R$)"],
         ["percentual", "Percentual da carta (%)"],
@@ -202,15 +227,15 @@ export const simulators: Simulator[] = [
     color: "orange",
     icon: "car",
     fields: [
-      f("valor", "Valor do veículo (R$)", "80.000"),
-      f("entrada", "Entrada (R$)", "20.000"),
+      currency("valor", "Valor do veículo (R$)", "80.000"),
+      currency("entrada", "Entrada (R$)", "20.000"),
       ...term.map((x) => (x.key === "prazo" ? { ...x, value: "48" } : x)),
       ...rate.map((x) => (x.key === "taxa" ? { ...x, value: "22" } : x)),
       { ...system, value: "Price" },
-      f("tarifas", "Tarifas à vista (R$)", "0"),
-      f("custos", "Custos adicionais à vista (R$)", "0"),
-      f("seguro", "Seguro mensal (R$)", "0"),
-      f("antecipacao", "Antecipação no primeiro mês (R$)", "5.000"),
+      currency("tarifas", "Tarifas à vista (R$)", "0"),
+      currency("custos", "Custos adicionais à vista (R$)", "0"),
+      currency("seguro", "Seguro mensal (R$)", "0"),
+      currency("antecipacao", "Antecipação no primeiro mês (R$)", "5.000"),
     ],
     faqs: [
       [
@@ -240,13 +265,13 @@ export const simulators: Simulator[] = [
         ["pessoal", "Empréstimo pessoal"],
         ["parcelado", "Crédito parcelado"],
       ]),
-      f("saldo", "Saldo devedor atual (R$)", "25.000"),
+      currency("saldo", "Saldo devedor atual (R$)", "25.000"),
       ...term.map((x) => (x.key === "prazo" ? { ...x, value: "24" } : x)),
       ...rate.map((x) => (x.key === "taxa" ? { ...x, value: "18" } : x)),
       { ...system, value: "Price" },
       date("dataSaldo", "Data de referência do saldo"),
       date("dataQuitacao", "Data prevista de quitação"),
-      f("encargos", "Encargos adicionais na quitação (R$)", "0"),
+      currency("encargos", "Encargos adicionais na quitação (R$)", "0"),
     ],
     faqs: [
       [
@@ -270,8 +295,8 @@ export const simulators: Simulator[] = [
     color: "teal",
     icon: "sprout",
     fields: [
-      f("inicial", "Valor inicial (R$)", "10.000"),
-      f("aporte", "Aporte mensal (R$)", "500"),
+      currency("inicial", "Valor inicial (R$)", "10.000"),
+      currency("aporte", "Aporte mensal (R$)", "500"),
       ...rate,
       ...term.map((x) => (x.key === "prazo" ? { ...x, value: "120" } : x)),
       f("inflacao", "Inflação anual estimada (%)", "4"),

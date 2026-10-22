@@ -32,6 +32,8 @@ import {
   Legend,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/currency-input";
+import { changeField, isCurrencyField } from "@/lib/currency-fields";
 import {
   calculate,
   money,
@@ -302,7 +304,14 @@ export default function Calculator({ sim }: { sim: Simulator }) {
                       id={f.key}
                       value={values[f.key]}
                       onChange={(e) =>
-                        setValues({ ...values, [f.key]: e.target.value })
+                        setValues((current) =>
+                          changeField(
+                            sim.fields,
+                            current,
+                            f.key,
+                            e.target.value,
+                          ),
+                        )
                       }
                     >
                       {f.options.map(([val, name]) => (
@@ -311,6 +320,16 @@ export default function Calculator({ sim }: { sim: Simulator }) {
                         </option>
                       ))}
                     </select>
+                  ) : isCurrencyField(f, values) ? (
+                    <CurrencyInput
+                      id={f.key}
+                      value={values[f.key]}
+                      onValueChange={(value) =>
+                        setValues((current) => ({ ...current, [f.key]: value }))
+                      }
+                      aria-describedby={f.hint ? f.key + "-hint" : undefined}
+                      autoComplete="off"
+                    />
                   ) : (
                     <input
                       id={f.key}
