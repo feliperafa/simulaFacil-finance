@@ -1,6 +1,6 @@
-import { parseBR } from "./finance";
+import { parseBR } from "./finance.ts";
 import type { Values } from "./finance";
-import type { Field } from "./simulators";
+import type { Field } from "../data/simulators";
 
 export function isCurrencyField(field: Field, values: Values): boolean {
   return (
@@ -9,8 +9,8 @@ export function isCurrencyField(field: Field, values: Values): boolean {
   );
 }
 
-/** Preserve the represented amount when a field changes between BRL and %. */
-export function changeField(
+/** Atualiza o campo e preserva o valor ao alternar entre reais e percentual. */
+export function updateFieldValue(
   fields: Field[],
   values: Values,
   key: string,

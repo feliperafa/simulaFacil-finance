@@ -1,92 +1,52 @@
 import vinext from "vinext";
-import { defineConfig } from "vite";
-import hostingConfig from "./.openai/hosting.json";
-import { readExecutionProfile } from "./scripts/execution-profile.mjs";
-import { configureToolEnvironment } from "./scripts/tool-environment.mjs";
-import { sites } from "./scripts/vite/sites-vite-plugin";
-import { connectorPreview } from "./scripts/vite/connector-preview-plugin.mjs";
+import { copyFile, mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { defineConfig, type Plugin } from "vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import tailwindcss from "@tailwindcss/postcss";
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
-const { d1, r2 } = hostingConfig;
-
-// macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
-const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
-const managedLinux = readExecutionProfile() === "managed-linux";
-
-const localBindingConfig = {
-  main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
-        },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
-        },
-      ]
-    : [],
-};
-
-export default defineConfig(async ({ command }) => {
-  configureToolEnvironment(process.cwd());
-
-  // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import("@cloudflare/vite-plugin");
+// Sites: atribuição e licença em docs/THIRD_PARTY_NOTICES.md.
+/** Inclui no build o manifesto usado para publicar o app no Sites. */
+function sites(): Plugin {
+  let projectRoot = process.cwd();
 
   return {
-    server: {
-      ...(managedLinux
-        ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] }
-        : {}),
-      ...(isCodexSeatbeltSandbox
-        ? { watch: { useFsEvents: false, usePolling: true } }
-        : {}),
+    name: "sites",
+    apply: "build",
+    configResolved(config) {
+      projectRoot = config.root;
     },
-    plugins: [
-      vinext(),
-      sites({ mockAuth: !managedLinux }),
-      connectorPreview(),
-      cloudflare({
-        viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        inspectorPort: false,
-        config: {
-          ...localBindingConfig,
-          ...(command === "serve"
-            ? {
-                services: [
-                  {
-                    binding: "CONNECTORS",
-                    service: "sites-connector-preview",
-                    entrypoint: "ConnectorPreview",
-                  },
-                ],
-              }
-            : {}),
-        },
-        ...(command === "serve"
-          ? {
-              auxiliaryWorkers: [
-                {
-                  config: {
-                    name: "sites-connector-preview",
-                    main: "./scripts/connector-preview/worker.mjs",
-                    compatibility_date: "2026-05-15",
-                  },
-                },
-              ],
-            }
-          : {}),
-      }),
-    ],
+    async closeBundle() {
+      const outputDirectory = resolve(projectRoot, "dist", ".openai");
+      await mkdir(outputDirectory, { recursive: true });
+      await copyFile(
+        resolve(projectRoot, ".openai", "hosting.json"),
+        resolve(outputDirectory, "hosting.json"),
+      );
+    },
   };
+}
+
+export default defineConfig({
+  css: {
+    postcss: {
+      plugins: [tailwindcss()],
+    },
+  },
+  server: {
+    port: 3000,
+    strictPort: true,
+  },
+  plugins: [
+    vinext(),
+    sites(),
+    cloudflare({
+      viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
+      inspectorPort: false,
+      config: {
+        main: "vinext/server/fetch-handler",
+        compatibility_flags: ["nodejs_compat"],
+      },
+    }),
+  ],
 });

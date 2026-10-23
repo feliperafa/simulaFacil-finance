@@ -1,25 +1,14 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@custom-variant dark (&:is([data-theme="dark"] *));
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-foreground: #fff;
   --border: #e3e9f1;
   --card: #fff;
   --muted: #536279;
   --soft: #f1f5fa;
   --green: #047857;
   --hero: #f2f7fc;
-  --radius: 0.75rem;
-  --ring: #2563eb;
   --accent: #eff6ff;
-  --accent-foreground: #0f172a;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --input: #dce3ec;
-  --destructive: #b91c1c;
 }
 [data-theme="dark"] {
   --background: #0b1220;
@@ -31,24 +20,6 @@
   --green: #6ee7b7;
   --hero: #101c30;
   --accent: #1e304a;
-  --accent-foreground: #fff;
-  --secondary: #1d2a40;
-  --secondary-foreground: #fff;
-  --input: #354764;
-}
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-input: var(--input);
-  --color-destructive: var(--destructive);
 }
 * {
   box-sizing: border-box;
@@ -1248,10 +1219,6 @@ footer {
 }
 .primary-metric strong {
   color: #2563eb;
-}
-.loading {
-  opacity: 0.5;
-  animation: pulse 0.7s infinite;
 }
 .dirty-note {
   padding: 10px 13px;

@@ -4,15 +4,11 @@ import Link from "next/link";
 import {
   ArrowRight,
   ArrowUpRight,
+  Sprout,
   Check,
   ChevronDown,
   ChevronUp,
-  House,
   ChartNoAxesCombined,
-  Users,
-  CarFront,
-  Wallet,
-  Sprout,
   ShieldCheck,
   LockKeyhole,
   Sparkles,
@@ -21,53 +17,9 @@ import {
   Layers,
   BookOpen,
 } from "lucide-react";
-import { simulators, additional } from "@/lib/simulators";
+import { additional } from "@/data/simulators";
+import { SimulatorCards } from "./simulator-cards";
 import { amortize, loan, money } from "@/lib/finance";
-export const iconMap = {
-  home: House,
-  chart: ChartNoAxesCombined,
-  users: Users,
-  car: CarFront,
-  wallet: Wallet,
-  sprout: Sprout,
-};
-export function SimulatorCards() {
-  return (
-    <div className="sim-grid">
-      {simulators.map((sim, i) => {
-        const Icon = iconMap[sim.icon as keyof typeof iconMap];
-        return (
-          <Link
-            href={"/" + sim.slug}
-            key={sim.kind}
-            className={"sim-card " + sim.color}
-          >
-            <div className="card-top">
-              <span className="sim-icon">
-                <Icon size={25} />
-              </span>
-              {i === 1 && (
-                <span className="popular">
-                  <span /> MAIS POPULAR
-                </span>
-              )}
-              <ArrowUpRight className="card-arrow" size={20} />
-            </div>
-            <h3>{sim.name}</h3>
-            <p>{sim.description}</p>
-            <div className="card-benefit">
-              <Check size={15} />
-              {sim.benefit}
-            </div>
-            <div className="card-link">
-              Simular agora <ArrowRight size={17} />
-            </div>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
 function HeroExample() {
   const [extra, setExtra] = useState(20000);
   const base = loan(300000, 0.008, 360, "SAC");

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Header, Footer, Consent } from "@/components/site-shell";
+import { siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://simulafacil-felipe.spryhen2048.chatgpt.site"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "SimulaFácil — Simule seu dinheiro. Economize de verdade.",
     template: "%s | SimulaFácil",

@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Calculator from "@/components/calculator";
-import { simulators } from "@/lib/simulators";
-import { InfoPage, infoPages } from "@/components/info-pages";
+import { simulators } from "@/data/simulators";
 export async function generateMetadata({
   params,
 }: {
@@ -10,16 +9,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const sim = simulators.find((s) => s.slug === slug);
-  const page = Object.hasOwn(infoPages, slug) ? infoPages[slug] : undefined;
   return {
-    title: sim
-      ? `Simulador de ${sim.name}`
-      : (page?.title ?? "Página não encontrada"),
-    description: sim?.description ?? page?.description,
+    title: sim ? `Simulador de ${sim.name}` : "Página não encontrada",
+    description: sim?.description,
     alternates: { canonical: "/" + slug },
     openGraph: {
-      title: sim?.name ?? page?.title,
-      description: sim?.description ?? page?.description,
+      title: sim?.name,
+      description: sim?.description,
       url: "/" + slug,
     },
   };
@@ -65,6 +61,5 @@ export default async function Page({
         <Calculator key={sim.kind} sim={sim} />
       </>
     );
-  if (Object.hasOwn(infoPages, slug)) return <InfoPage slug={slug} />;
   notFound();
 }

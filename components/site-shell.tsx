@@ -1,15 +1,24 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import dynamic from "next/dynamic";
 import {
   ArrowUpRight,
   ChartNoAxesCombined,
   Menu,
   X,
-  Moon,
-  Sun,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+// As preferências leem localStorage e são carregadas somente no navegador.
+const ThemeToggle = dynamic(
+  () => import("./browser-preferences").then((module) => module.ThemeToggle),
+  { ssr: false },
+);
+export const Consent = dynamic(
+  () => import("./browser-preferences").then((module) => module.Consent),
+  { ssr: false },
+);
+
 export function Logo() {
   return (
     <Link href="/" className="logo" aria-label="SimulaFácil — início">
@@ -22,13 +31,7 @@ export function Logo() {
   );
 }
 export function Header() {
-  const [dark, setDark] = useState(false),
-    [menu, setMenu] = useState(false);
-  useEffect(() => {
-    const d = localStorage.getItem("sf-theme") === "dark";
-    setDark(d);
-    document.documentElement.dataset.theme = d ? "dark" : "light";
-  }, []);
+  const [menu, setMenu] = useState(false);
   return (
     <header className="header">
       <div className="container nav">
@@ -54,18 +57,7 @@ export function Header() {
           </Link>
         </nav>
         <div className="nav-actions">
-          <button
-            className="icon-button"
-            title="Alternar tema"
-            aria-label="Alternar tema claro e escuro"
-            onClick={() => {
-              setDark(!dark);
-              document.documentElement.dataset.theme = !dark ? "dark" : "light";
-              localStorage.setItem("sf-theme", !dark ? "dark" : "light");
-            }}
-          >
-            {dark ? <Sun size={19} /> : <Moon size={19} />}
-          </button>
+          <ThemeToggle />
           <Link href="/conta" className="login-link">
             Entrar <ArrowUpRight size={16} />
           </Link>
@@ -135,35 +127,4 @@ export function Footer() {
       </div>
     </footer>
   );
-}
-export function Consent() {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    setOpen(!localStorage.getItem("sf-consent"));
-    const reset = () => setOpen(true);
-    window.addEventListener("sf-consent-reset", reset);
-    return () => window.removeEventListener("sf-consent-reset", reset);
-  }, []);
-  const choose = (v: string) => {
-    localStorage.setItem("sf-consent", v);
-    setOpen(false);
-  };
-  return open ? (
-    <aside className="cookie-banner" aria-label="Preferências de privacidade">
-      <div>
-        <strong>Sua privacidade, suas escolhas.</strong>
-        <p>
-          Usamos armazenamento local para tema e preferências. Anúncios e
-          rastreamento estão desativados nesta versão.{" "}
-          <Link href="/cookies">Saiba mais</Link>
-        </p>
-      </div>
-      <button className="button secondary" onClick={() => choose("essential")}>
-        Apenas essenciais
-      </button>
-      <button className="button small" onClick={() => choose("preferences")}>
-        Aceitar preferências
-      </button>
-    </aside>
-  ) : null;
 }

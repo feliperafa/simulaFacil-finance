@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 export type Kind =
   | "imobiliario"
   | "amortizacao"
@@ -55,20 +53,19 @@ export function parseBR(value: string): number {
     /^[+-]?\d{1,3}(?:\.\d{3})+$/.test(raw) ? raw.replace(/\./g, "") : raw,
   );
 }
-const finite = z.number().finite().min(0).max(1e10);
-function num(v: Values, key: string, min = 0, max = 1e10) {
-  const n = finite
-    .min(min)
-    .max(max)
-    .safeParse(parseBR(v[key] ?? ""));
-  if (!n.success)
+function readNumber(values: Values, key: string, min = 0, max = 1e10) {
+  const value = parseBR(values[key] ?? "");
+  if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(
       `Revise o campo “${key}”: informe um número entre ${min} e ${max}, no formato brasileiro.`,
     );
-  return n.data;
+  }
+  return value;
 }
-function months(v: Values) {
-  const n = num(v, "prazo", 1, 1200) * (v.unidadePrazo === "anos" ? 12 : 1);
+function readTermMonths(values: Values) {
+  const n =
+    readNumber(values, "prazo", 1, 1200) *
+    (values.unidadePrazo === "anos" ? 12 : 1);
   if (!Number.isInteger(n) || n > 1200)
     throw new Error("O prazo deve ser um número inteiro de meses, até 1.200.");
   return n;
@@ -234,7 +231,7 @@ export function amortize(
   }
   return rows;
 }
-export function calculate(kind: Kind, v: Values): Result {
+export function calculate(kind: Kind, values: Values): Result {
   const metrics: Metric[] = [],
     insights: string[] = [],
     assumptions: string[] = [],
@@ -242,28 +239,29 @@ export function calculate(kind: Kind, v: Values): Result {
   let rows: Row[] = [],
     comparison: Result["comparison"] = [],
     chartLabel = "Saldo devedor";
-  const M = (
+  const addMetric = (
     label: string,
     value: number | string,
     format: Metric["format"] = "money",
   ) => metrics.push({ label, value, format });
   if (kind === "imobiliario" || kind === "veiculo") {
-    const value = num(v, "valor", 0.01),
-      entry = num(v, "entrada"),
-      down = v.unidadeEntrada === "percentual" ? (value * entry) / 100 : entry;
+    const value = readNumber(values, "valor", 0.01),
+      entry = readNumber(values, "entrada"),
+      down =
+        values.unidadeEntrada === "percentual" ? (value * entry) / 100 : entry;
     if (down >= value)
       throw new Error("A entrada deve ser menor que o valor do bem.");
     const p = value - down,
-      n = months(v),
-      r = monthly(num(v, "taxa", 0, 100), v.unidadeTaxa),
-      fees = num(v, "tarifas"),
-      costs = num(v, "custos"),
-      insurance = num(v, "seguro"),
+      n = readTermMonths(values),
+      r = monthly(readNumber(values, "taxa", 0, 100), values.unidadeTaxa),
+      fees = readNumber(values, "tarifas"),
+      costs = readNumber(values, "custos"),
+      insurance = readNumber(values, "seguro"),
       index =
-        v.indexador === "fixo"
-          ? monthly(num(v, "correcao", 0, 10), "mensal")
+        values.indexador === "fixo"
+          ? monthly(readNumber(values, "correcao", 0, 10), "mensal")
           : 0;
-    const system = v.sistema ?? "Price";
+    const system = values.sistema ?? "Price";
     rows = loan(p, r, n, system, insurance, index);
     const other = loan(
       p,
@@ -275,30 +273,30 @@ export function calculate(kind: Kind, v: Values): Result {
     );
     const total = sum(rows, "payment") + down + fees + costs,
       interest = sum(rows, "interest");
-    M("Primeira prestação", rows[0].payment);
-    M("Última prestação", rows.at(-1)!.payment);
-    M("Total de juros", interest);
-    M("Total pago com entrada e custos", total);
-    M("Valor financiado", p);
+    addMetric("Primeira prestação", rows[0].payment);
+    addMetric("Última prestação", rows.at(-1)!.payment);
+    addMetric("Total de juros", interest);
+    addMetric("Total pago com entrada e custos", total);
+    addMetric("Valor financiado", p);
     const cet = cashflowRate(
       p - fees - costs,
       rows.map((x) => x.payment),
     );
-    M(
+    addMetric(
       "Custo anual equivalente estimado",
       cet === null ? "Dados insuficientes" : cet,
       cet === null ? "text" : "percent",
     );
     if (kind === "imobiliario") {
-      const income = num(v, "renda");
-      M(
+      const income = readNumber(values, "renda");
+      addMetric(
         "Comprometimento inicial da renda",
         income > 0 ? (rows[0].payment / income) * 100 : "Renda não informada",
         income > 0 ? "percent" : "text",
       );
     }
     if (kind === "veiculo") {
-      const antecipacao = num(v, "antecipacao");
+      const antecipacao = readNumber(values, "antecipacao");
       const advanced = amortize(
         p,
         r,
@@ -309,7 +307,10 @@ export function calculate(kind: Kind, v: Values): Result {
         "unica",
         "prazo",
       );
-      M("Juros evitados com antecipação", interest - sum(advanced, "interest"));
+      addMetric(
+        "Juros evitados com antecipação",
+        interest - sum(advanced, "interest"),
+      );
       assumptions.push(
         "Antecipação aplicada no início do primeiro mês, antes dos juros, sem cobrança de novos encargos.",
       );
@@ -337,35 +338,39 @@ export function calculate(kind: Kind, v: Values): Result {
         : "Taxa fixa, sem indexador. A taxa anual informada é efetiva e convertida por equivalência composta.",
     );
   } else if (kind === "amortizacao") {
-    const p = num(v, "saldo", 0.01),
-      n = months(v),
-      r = monthly(num(v, "taxa", 0, 100), v.unidadeTaxa),
-      extra = num(v, "extra", 0.01),
-      offset = dateOffset(v.dataSaldo, v.dataExtra),
+    const p = readNumber(values, "saldo", 0.01),
+      n = readTermMonths(values),
+      r = monthly(readNumber(values, "taxa", 0, 100), values.unidadeTaxa),
+      extra = readNumber(values, "extra", 0.01),
+      offset = dateOffset(values.dataSaldo, values.dataExtra),
       first = offset.months + 1;
     if (first > n)
       throw new Error("A amortização deve ocorrer dentro do prazo restante.");
-    const base = loan(p, r, n, v.sistema);
+    const base = loan(p, r, n, values.sistema);
     rows = amortize(
       p,
       r,
       n,
-      v.sistema,
+      values.sistema,
       extra,
       first,
-      v.periodicidade,
-      v.estrategia,
+      values.periodicidade,
+      values.estrategia,
     );
     const saving = sum(base, "interest") - sum(rows, "interest");
-    M("Juros economizados", saving);
-    M("Novo prazo estimado", `${rows.length} meses`, "text");
-    M(
+    addMetric("Juros economizados", saving);
+    addMetric("Novo prazo estimado", `${rows.length} meses`, "text");
+    addMetric(
       "Prestação após a amortização",
       rows.find((x) => (x.extra ?? 0) > 0)?.payment ?? rows[0].payment,
     );
-    M("Quitação estimada", addMonths(v.dataSaldo, rows.length), "text");
-    M("Economia total estimada", saving);
-    M("Amortizações extras", sum(rows, "extra"));
+    addMetric(
+      "Quitação estimada",
+      addMonths(values.dataSaldo, rows.length),
+      "text",
+    );
+    addMetric("Economia total estimada", saving);
+    addMetric("Amortizações extras", sum(rows, "extra"));
     comparison = [
       scenario("Cenário atual", base),
       scenario("Com amortização", rows),
@@ -380,13 +385,13 @@ export function calculate(kind: Kind, v: Values): Result {
       }),
       comparison: x.balance,
     }));
-    const current = num(v, "prestacao");
+    const current = readNumber(values, "prestacao");
     if (current > 0)
       insights.push(
         `A prestação teórica atual é ${money(base[0].payment)}. A informada é ${money(current)}; diferenças podem decorrer de seguros, correção e regras do contrato.`,
       );
     insights.push(
-      `Ao amortizar ${money(extra)} com periodicidade ${v.periodicidade}, a economia de juros é ${money(saving)}, pelas premissas informadas.`,
+      `Ao amortizar ${money(extra)} com periodicidade ${values.periodicidade}, a economia de juros é ${money(saving)}, pelas premissas informadas.`,
     );
     assumptions.push(
       "Estimativa sem indexadores, seguros ou tarifas. Datas da amortização são agrupadas por mês: o mês da data do saldo é o primeiro ciclo; o dia exato não produz juros pro rata. O extra é aplicado antes dos juros e da parcela desse ciclo.",
@@ -398,18 +403,18 @@ export function calculate(kind: Kind, v: Values): Result {
       { name: "Juros após amortização", value: comparison[1].interest },
     );
   } else if (kind === "consorcio") {
-    const credit = num(v, "carta", 0.01),
-      n = months(v),
-      admin = num(v, "administracao", 0, 100) / 100,
-      reserve = num(v, "reserva", 0, 100) / 100,
-      insurance = num(v, "seguro"),
+    const credit = readNumber(values, "carta", 0.01),
+      n = readTermMonths(values),
+      admin = readNumber(values, "administracao", 0, 100) / 100,
+      reserve = readNumber(values, "reserva", 0, 100) / 100,
+      insurance = readNumber(values, "seguro"),
       own =
-        num(v, "lanceProprio") *
-        (v.unidadeLanceProprio === "percentual" ? credit / 100 : 1),
+        readNumber(values, "lanceProprio") *
+        (values.unidadeLanceProprio === "percentual" ? credit / 100 : 1),
       embedded =
-        num(v, "lanceEmbutido") *
-        (v.unidadeLanceEmbutido === "percentual" ? credit / 100 : 1),
-      adjust = num(v, "reajuste", 0, 100) / 100;
+        readNumber(values, "lanceEmbutido") *
+        (values.unidadeLanceEmbutido === "percentual" ? credit / 100 : 1),
+      adjust = readNumber(values, "reajuste", 0, 100) / 100;
     if (own + embedded > credit)
       throw new Error(
         "A soma dos lances não pode ultrapassar a carta de crédito.",
@@ -432,19 +437,19 @@ export function calculate(kind: Kind, v: Values): Result {
     }
     const total = sum(rows, "payment") + own,
       fees = sum(rows, "interest");
-    M("Parcela inicial estimada", rows[0].payment);
-    M("Desembolso total estimado", total);
-    M("Crédito líquido após lance embutido", credit - embedded);
-    M("Recursos próprios para o lance", own);
-    M("Saldo inicial após os lances", remaining);
-    M(
+    addMetric("Parcela inicial estimada", rows[0].payment);
+    addMetric("Desembolso total estimado", total);
+    addMetric("Crédito líquido após lance embutido", credit - embedded);
+    addMetric("Recursos próprios para o lance", own);
+    addMetric("Saldo inicial após os lances", remaining);
+    addMetric(
       "Percentual total de lance",
       ((own + embedded) / credit) * 100,
       "percent",
     );
     const fin = loan(
       credit - embedded - own,
-      monthly(num(v, "taxaComparacao", 0, 100), "anual"),
+      monthly(readNumber(values, "taxaComparacao", 0, 100), "anual"),
       n,
       "Price",
     );
@@ -452,7 +457,7 @@ export function calculate(kind: Kind, v: Values): Result {
       scenario("Consórcio", rows, own),
       scenario("Financiamento Price", fin, own),
     ];
-    const current = num(v, "prestacao");
+    const current = readNumber(values, "prestacao");
     if (current > 0)
       insights.push(
         `Sua parcela informada de ${money(current)} deve ser conferida com a estimativa inicial de ${money(rows[0].payment)}.`,
@@ -471,27 +476,27 @@ export function calculate(kind: Kind, v: Values): Result {
       { name: "Lance próprio", value: own },
     );
   } else if (kind === "quitacao") {
-    const p = num(v, "saldo", 0.01),
-      r = monthly(num(v, "taxa", 0, 100), v.unidadeTaxa),
-      n = months(v),
-      charges = num(v, "encargos"),
-      offset = dateOffset(v.dataSaldo, v.dataQuitacao);
+    const p = readNumber(values, "saldo", 0.01),
+      r = monthly(readNumber(values, "taxa", 0, 100), values.unidadeTaxa),
+      n = readTermMonths(values),
+      charges = readNumber(values, "encargos"),
+      offset = dateOffset(values.dataSaldo, values.dataQuitacao);
     if (offset.days > 31)
       throw new Error(
         "Para quitação além de 31 dias, atualize primeiro o saldo devedor na instituição.",
       );
     const balance = p * Math.pow(1 + r, offset.days / 30),
-      base = loan(p, r, n, v.sistema),
+      base = loan(p, r, n, values.sistema),
       settlement = balance + charges,
       saving = sum(base, "payment") - settlement;
     rows = base;
-    M("Quitação estimada na data", settlement);
-    M("Saldo atualizado estimado", balance);
-    M("Juros futuros evitados, líquidos de encargos", saving);
-    M("Continuar pagando", sum(base, "payment"));
-    M(
+    addMetric("Quitação estimada na data", settlement);
+    addMetric("Saldo atualizado estimado", balance);
+    addMetric("Juros futuros evitados, líquidos de encargos", saving);
+    addMetric("Continuar pagando", sum(base, "payment"));
+    addMetric(
       "Data prevista",
-      dateValue(v.dataQuitacao).toLocaleDateString("pt-BR", {
+      dateValue(values.dataQuitacao).toLocaleDateString("pt-BR", {
         timeZone: "UTC",
       }),
       "text",
@@ -519,13 +524,16 @@ export function calculate(kind: Kind, v: Values): Result {
       { name: "Juros até a data e encargos", value: balance - p + charges },
     );
   } else {
-    const initial = num(v, "inicial"),
-      deposit = num(v, "aporte"),
-      n = months(v),
-      r = monthly(num(v, "taxa", 0, 100), v.unidadeTaxa),
-      alternative = monthly(num(v, "taxaComparacao", 0, 100), v.unidadeTaxa),
-      inflation = monthly(num(v, "inflacao", 0, 100), "anual"),
-      tax = num(v, "tributacao", 0, 100) / 100;
+    const initial = readNumber(values, "inicial"),
+      deposit = readNumber(values, "aporte"),
+      n = readTermMonths(values),
+      r = monthly(readNumber(values, "taxa", 0, 100), values.unidadeTaxa),
+      alternative = monthly(
+        readNumber(values, "taxaComparacao", 0, 100),
+        values.unidadeTaxa,
+      ),
+      inflation = monthly(readNumber(values, "inflacao", 0, 100), "anual"),
+      tax = readNumber(values, "tributacao", 0, 100) / 100;
     let balance = initial,
       other = initial;
     chartLabel = "Patrimônio bruto";
@@ -548,12 +556,15 @@ export function calculate(kind: Kind, v: Values): Result {
       taxes = gross * tax,
       net = balance - taxes,
       netOther = other - (other - invested) * tax;
-    M("Patrimônio final líquido estimado", net);
-    M("Total investido", invested);
-    M("Rendimento bruto / ganho nominal", gross);
-    M("Tributação estimada", taxes);
-    M("Rendimento líquido", gross - taxes);
-    M("Poder de compra em reais de hoje", net / Math.pow(1 + inflation, n));
+    addMetric("Patrimônio final líquido estimado", net);
+    addMetric("Total investido", invested);
+    addMetric("Rendimento bruto / ganho nominal", gross);
+    addMetric("Tributação estimada", taxes);
+    addMetric("Rendimento líquido", gross - taxes);
+    addMetric(
+      "Poder de compra em reais de hoje",
+      net / Math.pow(1 + inflation, n),
+    );
     comparison = [
       {
         name: "Taxa principal",

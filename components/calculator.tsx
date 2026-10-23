@@ -16,24 +16,9 @@ import {
   Layers,
   X,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts";
-import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
 import { CurrencyInput } from "@/components/currency-input";
-import { changeField, isCurrencyField } from "@/lib/currency-fields";
+import { updateFieldValue, isCurrencyField } from "@/lib/currency-fields";
 import {
   calculate,
   money,
@@ -42,137 +27,30 @@ import {
   type Result,
   type Values,
 } from "@/lib/finance";
-import { defaults, type Simulator } from "@/lib/simulators";
-const colors = ["#2563eb", "#10b981", "#a78bfa", "#f59e0b"];
-function Chart({
-  result,
-  type,
-}: {
-  result: Result;
-  type: "balance" | "composition" | "payments";
-}) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted)
-    return <div className="chart-skeleton" aria-label="Carregando gráfico" />;
-  const format = (v: unknown) => money(Number(v));
-  return (
-    <ResponsiveContainer width="100%" height={270}>
-      {type === "composition" ? (
-        <PieChart>
-          <Pie
-            data={result.composition.filter((x) => x.value > 0)}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={68}
-            outerRadius={100}
-            paddingAngle={3}
-          >
-            {result.composition.map((_, i) => (
-              <Cell key={i} fill={colors[i % colors.length]} />
-            ))}
-          </Pie>
-          <Tooltip formatter={format} />
-          <Legend />
-        </PieChart>
-      ) : type === "payments" ? (
-        <BarChart
-          data={result.rows.filter(
-            (_, i) =>
-              i % Math.max(1, Math.floor(result.rows.length / 25)) === 0,
-          )}
-        >
-          <CartesianGrid stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="month" tickLine={false} axisLine={false} />
-          <YAxis
-            tickFormatter={(v) =>
-              new Intl.NumberFormat("pt-BR", { notation: "compact" }).format(v)
-            }
-            width={55}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip formatter={format} labelFormatter={(x) => "Mês " + x} />
-          <Bar
-            dataKey="amortization"
-            name="Amortização / aporte"
-            stackId="a"
-            fill="#2563eb"
-          />
-          <Bar
-            dataKey="interest"
-            name="Juros / encargos"
-            stackId="a"
-            fill="#10b981"
-          />
-          <Legend />
-        </BarChart>
-      ) : (
-        <AreaChart data={result.rows}>
-          <defs>
-            <linearGradient id="balance-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563eb" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid
-            stroke="var(--border)"
-            vertical={false}
-            strokeDasharray="3 4"
-          />
-          <XAxis dataKey="month" tickLine={false} axisLine={false} />
-          <YAxis
-            tickFormatter={(v) =>
-              new Intl.NumberFormat("pt-BR", { notation: "compact" }).format(v)
-            }
-            width={55}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip formatter={format} labelFormatter={(x) => "Mês " + x} />
-          <Area
-            type="monotone"
-            dataKey="comparison"
-            name="Cenário de comparação"
-            stroke="#10b981"
-            fill="none"
-            strokeDasharray="5 4"
-          />
-          <Area
-            type="monotone"
-            dataKey="balance"
-            name={result.chartLabel}
-            stroke="#2563eb"
-            fill="url(#balance-fill)"
-            strokeWidth={2}
-          />
-          <Legend />
-        </AreaChart>
-      )}
-    </ResponsiveContainer>
-  );
-}
+import { defaults, type Simulator } from "@/data/simulators";
+// Os gráficos usam o navegador; os resultados também são renderizados no servidor.
+const SimulationChart = dynamic(() => import("./simulation-chart"), {
+  ssr: false,
+  loading: () => (
+    <div className="chart-skeleton" aria-label="Carregando gráfico" />
+  ),
+});
+
 export default function Calculator({ sim }: { sim: Simulator }) {
   const [values, setValues] = useState<Values>(() => defaults(sim));
   const [snapshot, setSnapshot] = useState<Values>(() => defaults(sim));
   const [result, setResult] = useState<Result>(() =>
     calculate(sim.kind, defaults(sim)),
   );
-  const [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [tab, setTab] = useState<"balance" | "composition" | "payments">("balance"),
-    [page, setPage] = useState(0),
-    [saved, setSaved] = useState<Result | null>(null),
-    [notice, setNotice] = useState(""),
-    [report, setReport] = useState(false);
-  const output = useRef<HTMLDivElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState<"balance" | "composition" | "payments">(
+    "balance",
   );
+  const [page, setPage] = useState(0);
+  const [saved, setSaved] = useState<Result | null>(null);
+  const [notice, setNotice] = useState("");
+  const [report, setReport] = useState(false);
+  const output = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!report) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -204,20 +82,19 @@ export default function Calculator({ sim }: { sim: Simulator }) {
       previous?.focus();
     };
   }, [report]);
+  const updateValue = (key: string, value: string) => {
+    setValues((current) => updateFieldValue(sim.fields, current, key, value));
+  };
   const simulate = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     try {
       const next = calculate(sim.kind, values);
-      setBusy(true);
-      timer.current = setTimeout(() => {
-        setResult(next);
-        setSnapshot({ ...values });
-        setBusy(false);
-        setPage(0);
-        setNotice("Simulação atualizada.");
-        output.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 180);
+      setResult(next);
+      setSnapshot({ ...values });
+      setPage(0);
+      setNotice("Simulação atualizada.");
+      output.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Revise os dados informados.");
     }
@@ -292,58 +169,54 @@ export default function Calculator({ sim }: { sim: Simulator }) {
           </div>
           <div className="fields">
             {sim.fields
-              .filter((f) => !f.when || values[f.when[0]] === f.when[1])
-              .map((f) => (
+              .filter(
+                (field) =>
+                  !field.when || values[field.when[0]] === field.when[1],
+              )
+              .map((field) => (
                 <div
-                  className={"field " + (f.hint ? "with-hint" : "")}
-                  key={f.key}
+                  className={"field " + (field.hint ? "with-hint" : "")}
+                  key={field.key}
                 >
-                  <label htmlFor={f.key}>{f.label}</label>
-                  {f.options ? (
+                  <label htmlFor={field.key}>{field.label}</label>
+                  {field.options ? (
                     <select
-                      id={f.key}
-                      value={values[f.key]}
-                      onChange={(e) =>
-                        setValues((current) =>
-                          changeField(
-                            sim.fields,
-                            current,
-                            f.key,
-                            e.target.value,
-                          ),
-                        )
-                      }
+                      id={field.key}
+                      value={values[field.key]}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
                     >
-                      {f.options.map(([val, name]) => (
+                      {field.options.map(([val, name]) => (
                         <option key={val} value={val}>
                           {name}
                         </option>
                       ))}
                     </select>
-                  ) : isCurrencyField(f, values) ? (
+                  ) : isCurrencyField(field, values) ? (
                     <CurrencyInput
-                      id={f.key}
-                      value={values[f.key]}
-                      onValueChange={(value) =>
-                        setValues((current) => ({ ...current, [f.key]: value }))
+                      id={field.key}
+                      value={values[field.key]}
+                      onValueChange={(value) => updateValue(field.key, value)}
+                      aria-describedby={
+                        field.hint ? field.key + "-hint" : undefined
                       }
-                      aria-describedby={f.hint ? f.key + "-hint" : undefined}
                       autoComplete="off"
                     />
                   ) : (
                     <input
-                      id={f.key}
-                      type={f.type ?? "text"}
-                      inputMode={f.type ? "none" : "decimal"}
-                      value={values[f.key]}
-                      onChange={(e) =>
-                        setValues({ ...values, [f.key]: e.target.value })
+                      id={field.key}
+                      type={field.type ?? "text"}
+                      inputMode={field.type ? "none" : "decimal"}
+                      value={values[field.key]}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      aria-describedby={
+                        field.hint ? field.key + "-hint" : undefined
                       }
-                      aria-describedby={f.hint ? f.key + "-hint" : undefined}
                       autoComplete="off"
                     />
                   )}
-                  {f.hint && <small id={f.key + "-hint"}>{f.hint}</small>}
+                  {field.hint && (
+                    <small id={field.key + "-hint"}>{field.hint}</small>
+                  )}
                 </div>
               ))}
           </div>
@@ -358,15 +231,9 @@ export default function Calculator({ sim }: { sim: Simulator }) {
               {error}
             </div>
           )}
-          <Button
-            className="button calculate-button"
-            size="lg"
-            disabled={busy}
-            type="submit"
-          >
-            {busy ? "Calculando…" : "Calcular simulação"}{" "}
-            <ArrowRight size={18} />
-          </Button>
+          <button className="button calculate-button" type="submit">
+            Calcular simulação <ArrowRight size={18} />
+          </button>
           <button
             type="button"
             className="reset-button"
@@ -385,7 +252,7 @@ export default function Calculator({ sim }: { sim: Simulator }) {
             vínculo com ofertas de instituições.
           </p>
         </form>
-        <div className="results" ref={output} aria-busy={busy}>
+        <div className="results" ref={output}>
           <div className="result-heading">
             <div>
               <span className="overline">SEU PLANEJAMENTO EM NÚMEROS</span>
@@ -399,7 +266,7 @@ export default function Calculator({ sim }: { sim: Simulator }) {
               para atualizar os resultados.
             </div>
           )}
-          <div className={busy ? "metrics-grid loading" : "metrics-grid"}>
+          <div className="metrics-grid">
             {result.metrics.map((m, i) => (
               <div
                 key={m.label}
@@ -455,7 +322,7 @@ export default function Calculator({ sim }: { sim: Simulator }) {
                 </button>
               ))}
             </div>
-            <Chart result={result} type={tab} />
+            <SimulationChart result={result} type={tab} />
             <p className="chart-caption">
               Eixo horizontal em meses. Passe sobre o gráfico para ver os
               valores. A tabela completa está abaixo.
@@ -688,15 +555,20 @@ export default function Calculator({ sim }: { sim: Simulator }) {
             <h3>Parâmetros utilizados</h3>
             <div className="report-params">
               {sim.fields
-                .filter((f) => !f.when || snapshot[f.when[0]] === f.when[1])
-                .map((f) => (
-                  <p key={f.key}>
-                    {f.label}:{" "}
-                    {f.options
-                      ? f.options.find((o) => o[0] === snapshot[f.key])?.[1]
-                      : f.type === "date"
-                        ? snapshot[f.key].split("-").reverse().join("/")
-                        : snapshot[f.key]}
+                .filter(
+                  (field) =>
+                    !field.when || snapshot[field.when[0]] === field.when[1],
+                )
+                .map((field) => (
+                  <p key={field.key}>
+                    {field.label}:{" "}
+                    {field.options
+                      ? field.options.find(
+                          (o) => o[0] === snapshot[field.key],
+                        )?.[1]
+                      : field.type === "date"
+                        ? snapshot[field.key].split("-").reverse().join("/")
+                        : snapshot[field.key]}
                   </p>
                 ))}
             </div>
