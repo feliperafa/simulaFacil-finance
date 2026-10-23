@@ -1,8 +1,8 @@
-# SimulaFácil — arquitetura e plano de evolução
+# SimulaFácil — arquitetura
 
 ## Entrega atual: Fase 1
 
-React 19 + TypeScript, Tailwind CSS 4, shadcn/ui (Button), Lucide, Zod e Recharts. Vinext oferece o modelo de rotas do Next.js e renderização HTML no servidor em Cloudflare Workers. A integração Sites e o manifesto `.openai/hosting.json` são preservados. Não há banco de dados, cadastro ou cobrança ativos.
+React 19 + TypeScript, CSS próprio com a base do Tailwind CSS 4, Lucide e Recharts. Os campos monetários usam react-number-format. Vinext oferece o modelo de rotas do Next.js e renderização HTML no servidor em Cloudflare Workers. A integração Sites e o manifesto `.openai/hosting.json` são preservados. Não há banco de dados, cadastro ou cobrança ativos.
 
 ### Páginas
 
@@ -15,15 +15,16 @@ As páginas públicas entregam H1, conteúdo e metadados em HTML, sem depender a
 
 ### Separação de responsabilidades
 
-| Camada            | Arquivos                   | Responsabilidade                                              |
-| ----------------- | -------------------------- | ------------------------------------------------------------- |
-| Rotas/SEO         | `app/`                     | HTML do servidor, metadados, sitemap e roteamento             |
-| Interface         | `components/`              | Navegação, formulários, resultados, gráficos e tabelas        |
-| Configuração      | `lib/simulators.ts`        | Campos, valores ilustrativos editáveis, perguntas e descrição |
-| Cálculo           | `lib/finance.ts`           | Funções determinísticas e validação numérica Zod              |
-| Testes            | `scripts/test-finance.mjs` | Referências conhecidas, conservação de principal e extremos   |
-| Contratos futuros | `docs/openapi.yaml`        | Fronteira HTTP versionada para backend Supabase ou Java 21    |
-| Banco futuro      | `docs/schema-proposed.sql` | Modelo PostgreSQL/Supabase com RLS; não aplicado              |
+| Camada       | Arquivos                             | Responsabilidade                                                        |
+| ------------ | ------------------------------------ | ----------------------------------------------------------------------- |
+| Rotas/SEO    | `app/`                               | HTML do servidor, metadados, sitemap e roteamento                       |
+| Interface    | `components/`                        | Navegação, formulários, resultados, gráficos e tabelas                  |
+| Dados        | `data/`                              | Campos dos simuladores, valores ilustrativos e artigos                  |
+| Cálculo      | `lib/finance.ts`                     | Funções determinísticas e validação numérica com JavaScript             |
+| Domínio      | `lib/site.ts`                        | Endereço compartilhado pelos metadados, robots e sitemap                |
+| Gráficos     | `components/simulation-chart.tsx`    | Visualizações dos resultados no navegador                               |
+| Preferências | `components/browser-preferences.tsx` | Tema e consentimento no localStorage                                    |
+| Testes       | `tests/`                             | Referências financeiras, conservação de principal e conversão monetária |
 
 Formulários financeiros não são enviados ao servidor. O resultado inicial usa parâmetros de exemplo no SSR; ao editar e calcular, as funções executam no navegador. Comparações são temporárias em memória. Apenas tema e consentimento são armazenados em localStorage. CSV é gerado localmente, sem envio de dados a terceiros.
 
@@ -41,24 +42,8 @@ Formulários financeiros não são enviados ao servidor. O resultado inicial usa
 
 Referência Price: [Banco Central — metodologia de prestações fixas](https://www3.bcb.gov.br/CALCIDADAO/publico/exibirMetodologiaFinanciamentoPrestacoesFixas.do?method=exibirMetodologiaFinanciamentoPrestacoesFixas).
 
-## Banco de dados proposto
-
-`profiles` (ligado ao auth.users), `simulations`, `scenarios`, `plans`, `subscriptions`, `payments`, `reports`, `webhook_events`, `content_articles`, `usage_events`. Simulações e relatórios pertencem a um único usuário. A relação composta cenário/simulação/usuário impede vínculos entre contas. Planos e conteúdo publicado podem ser lidos publicamente. Dados comerciais só serão alterados pelo backend autorizado; não por status visual do frontend.
-
-O SQL proposto em `docs/schema-proposed.sql` é preparação e não uma migração executada. Nenhuma métrica administrativa é inventada. A fase de contas deve implementar verificação de e-mail, recuperação de senha, exclusão integral de dados, políticas de retenção e contato do controlador antes de abrir cadastro.
-
-## Próximas fases (não implementadas)
-
-2. Supabase Auth/PostgreSQL, histórico persistido, duplicação e exclusão, comparação salva, PDF profissional e prévia. Recalcular no servidor parâmetros de relatórios; não confiar em totais enviados pelo cliente.
-3. Gateway PIX/cartão, checkout, webhook assinado e idempotente, entitlement validado no servidor, assinatura e administração protegida. Preços e limites configuráveis no banco. Servidor deve limitar requisições por usuário/IP e validar autorização antes de gerar ou entregar um relatório pago. Sem segredos no navegador.
-4. Conteúdo ampliado, novas ferramentas e IA explicativa opcional, sempre limitada aos resultados calculados. Integrações somente após configuração e testes. AdSense depende de aprovação, política atualizada e gestão adequada de consentimento.
-
-As versões HTTP v1 e `engineVersion` devem estabilizar as respostas para uma possível implementação Java 21/Spring Boot, reutilizando os mesmos casos de referência como testes de contrato. Valores monetários serializados como decimais string, datas ISO no transporte e DD/MM/AAAA na interface.
-
 ## Verificação e execução
 
-`npm run test:finance` executa os testes do motor. `npm run typecheck` verifica TypeScript. `npm run dev` inicia em http://127.0.0.1:5173. `npm run build` gera Worker e assets. Os comandos pressupõem Node >=22.13. Uma distribuição portátil está disponível na pasta irmã `.tools` deste ambiente.
+`npm test` executa todos os testes pelo runner nativo do Node, sem gerar arquivos de compilação. `npm run test:finance` executa apenas os testes do motor. `npm run typecheck` verifica TypeScript e `npm run lint` verifica o código. `npm run dev` inicia em http://localhost:3000. `npm run build` gera o Worker e os assets; `npm start` serve esse build local na porta 3000. Os comandos pressupõem Node.js >=22.13.
 
-No Windows deste ambiente, o chamador de npm do helper Sites resolveu o shim incorretamente. A instalação foi concluída chamando o entrypoint JavaScript oficial do npm com o diretório do Node no PATH. A compilação direta usou o script original `scripts/run-framework.mjs build`. Nenhum pacote do plugin ou configuração global foi alterado.
-
-A versão hospedada permanece privada. Publicação pública e coleta de dados exigirão completar a identificação do controlador e revisar as políticas conforme a operação comercial real.
+Não há banco de dados ou API comercial ativos. Contas, histórico persistido, PDF, checkout, assinaturas, administração e IA externa ainda não foram implementados. A interface informa a indisponibilidade desses recursos.
